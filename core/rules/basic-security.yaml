@@ -1,0 +1,35 @@
+rules:
+  - id: hardcoded-secret
+    languages: [python]
+    severity: ERROR
+    message: "Hardcoded API key / secret detected. Secrets should never be committed to source code."
+    metadata:
+      category: security
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+      references:
+        - https://owasp.org/www-community/vulnerabilities/Use_of_hard-coded_password
+    pattern-either:
+      - pattern: $VAR = "sk-..."
+      - pattern-regex: (API_KEY|SECRET_KEY|PASSWORD)\s*=\s*"[^"]{16,}"
+
+  - id: sql-injection-string-concat
+    languages: [python]
+    severity: ERROR
+    message: "Possible SQL Injection: query string built with concatenation instead of parameterized query."
+    metadata:
+      category: security
+      cwe: "CWE-89: SQL Injection"
+      references:
+        - https://owasp.org/www-community/attacks/SQL_Injection
+    pattern: $QUERY = "..." + $VAR
+
+  - id: os-system-command-injection
+    languages: [python]
+    severity: ERROR
+    message: "Possible Command Injection: os.system() called with concatenated/untrusted input."
+    metadata:
+      category: security
+      cwe: "CWE-78: OS Command Injection"
+      references:
+        - https://owasp.org/www-community/attacks/Command_Injection
+    pattern: os.system("..." + $VAR)

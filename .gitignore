@@ -1,0 +1,18 @@
+# Python
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Env / secrets
+.env
+*.key
+
+# Scan output (regenerated each run)
+findings.json
+explanations.json
+
+# OS/editor
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
