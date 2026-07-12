@@ -171,7 +171,10 @@ def explain_findings(findings: list[dict[str, Any]]) -> list[Explanation]:
     """Explain a whole list of raw findings (e.g. loaded from findings.json)."""
     client = _get_client()
     explanations = []
-    for finding in findings:
+    total = len(findings)
+    for i, finding in enumerate(findings, start=1):
+        rule = finding.get("rule_id", "unknown-rule")
+        print(f"  [{i}/{total}] Explaining {rule} ...", flush=True)
         try:
             explanations.append(explain_finding(finding, client=client))
         except Exception as e:
