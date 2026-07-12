@@ -1,4 +1,4 @@
-# Ctrl+Alt+Delulu — Parts 01 & 02 (Sumaira)
+# Ctrl+Alt+Delulu 
 
 **Part 01 — Core Scanner** (`core/scanner.py`)
 Wraps the Semgrep OSS CLI. Runs it on any file/folder and returns clean,
