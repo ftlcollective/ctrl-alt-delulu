@@ -172,6 +172,25 @@ def scan(target_path: str, config: str = "auto") -> list[Finding]:
     return parse_findings(raw)
 
 
+def scan_into_state(
+    target_path: str,
+    config: str = "auto",
+    state_path: str = "scan-state.json",
+) -> list[Finding]:
+    """
+    Run the scan and write results directly into the shared scan-state.json
+    (created once by init_scan_state.py). This is the entry point Part 01
+    should use so Part 02/03/06 can all read from the same file.
+    """
+    import state as scan_state  # local import: core/ isn't a package, just a folder on sys.path
+
+    findings = scan(target_path, config=config)
+    state = scan_state.load_state(state_path)
+    scan_state.add_findings(state, findings, project_path=str(Path(target_path).resolve()))
+    scan_state.save_state(state, state_path)
+    return findings
+
+
 def save_findings(findings: list[Finding], out_path: str) -> None:
     """Save a list of Finding objects to a JSON file (for Part 02 to consume)."""
     with open(out_path, "w") as f:
