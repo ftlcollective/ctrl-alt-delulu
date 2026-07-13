@@ -8,7 +8,7 @@ and exactly how to fix it. This is the team's key differentiator.
 
 Provider: NVIDIA NIM (free, OpenAI-compatible) by default.
     export AI_PROVIDER="nvidia"          # default, no need to set explicitly
-    export NVIDIA_API_KEY=""    # get one free at https://build.nvidia.com
+    export NVIDIA_API_KEY="nvapi-..."    # get one free at https://build.nvidia.com
     export NVIDIA_MODEL="meta/llama-3.3-70b-instruct"   # optional override
 
 To use Anthropic (Claude) instead:
@@ -27,8 +27,8 @@ from typing import Any, Protocol
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 DEFAULT_NVIDIA_MODEL = "meta/llama-3.3-70b-instruct"
 DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6"
-REQUEST_TIMEOUT_SECONDS = 45
-MAX_TOKENS = 350
+REQUEST_TIMEOUT_SECONDS = 90
+MAX_TOKENS = 220
 
 SYSTEM_PROMPT = """You are a friendly senior developer helping a beginner \
 understand a security vulnerability found by a static analysis scanner \
@@ -148,8 +148,37 @@ def _clean_json_text(raw_text: str) -> str:
     return text
 
 
+def _extract_json_object(text: str) -> str:
+    """
+    Pull out the first balanced {...} object from text, ignoring any
+    preamble/postamble the model added despite instructions not to.
+    Brace-counting (not just first '{' to last '}') so nested objects
+    inside string values don't confuse the boundary.
+    """
+    start = text.find("{")
+    if start == -1:
+        return text
+    depth = 0
+    for i in range(start, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+    return text[start:]  # unbalanced — return what we have, let json.loads raise
+
+
+CORRECTION_SUFFIX = """
+
+Your previous response could not be parsed as valid JSON. Respond again
+with ONLY a single valid JSON object, no preamble, no code fences. Make
+sure any quotes, backslashes, or special characters inside string values
+are properly escaped."""
+
+
 def explain_finding(finding: dict[str, Any], client: AIClient | None = None) -> Explanation:
-    """Call the AI API to explain a single raw finding dict."""
+    """Call the AI API to explain a single raw finding dict, with one automatic retry on malformed JSON."""
     client = client or _get_client()
 
     user_payload = {
@@ -160,9 +189,24 @@ def explain_finding(finding: dict[str, Any], client: AIClient | None = None) -> 
         "code_snippet": finding.get("code_snippet"),
         "cwe": finding.get("metadata", {}).get("cwe"),
     }
+    user_prompt = json.dumps(user_payload, indent=2)
 
-    raw_text = client.complete(SYSTEM_PROMPT, json.dumps(user_payload, indent=2))
-    parsed = json.loads(_clean_json_text(raw_text))
+    parsed = None
+    last_error: Exception | None = None
+
+    for attempt in range(2):  # first try, then one corrective retry
+        prompt = user_prompt if attempt == 0 else user_prompt + CORRECTION_SUFFIX
+        raw_text = client.complete(SYSTEM_PROMPT, prompt)
+        candidate = _extract_json_object(_clean_json_text(raw_text))
+        try:
+            parsed = json.loads(candidate)
+            break
+        except json.JSONDecodeError as e:
+            last_error = e
+            continue
+
+    if parsed is None:
+        raise ValueError(f"AI response was not valid JSON after retry: {last_error}")
 
     return Explanation(
         rule_id=finding.get("rule_id", "unknown-rule"),
